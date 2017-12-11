@@ -18,6 +18,8 @@ package org.thingsboard.gateway.extensions.mqtt.client.conf.mapping;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.Option;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
@@ -52,16 +54,20 @@ public class MqttJsonConverter extends AbstractJsonConverter implements MqttData
     private final List<AttributesMapping> attributes;
     private final List<TimeseriesMapping> timeseries;
 
+    private Configuration conf;
+
     @Override
     public List<DeviceData> convert(String topic, MqttMessage msg) throws Exception {
         String data = new String(msg.getPayload(), StandardCharsets.UTF_8);
         log.trace("Parsing json message: {}", data);
 
+        conf =  Configuration.defaultConfiguration();
+        conf = conf.addOptions(Option.DEFAULT_PATH_LEAF_TO_NULL);
         if (!filterExpression.isEmpty()) {
             try {
                 log.debug("Data before filtering {}", data);
-                DocumentContext document = JsonPath.parse(data);
-                document = JsonPath.parse((Object) document.read(filterExpression));
+                DocumentContext document = JsonPath.using(conf).parse(data);
+                document = JsonPath.using(conf).parse((Object) document.read(filterExpression));
                 data = document.jsonString();
                 log.debug("Data after filtering {}", data);
             } catch (RuntimeException e) {
@@ -87,7 +93,7 @@ public class MqttJsonConverter extends AbstractJsonConverter implements MqttData
     private List<DeviceData> parse(String topic, List<String> srcList) {
         List<DeviceData> result = new ArrayList<>(srcList.size());
         for (String src : srcList) {
-            DocumentContext document = JsonPath.parse(src);
+            DocumentContext document = JsonPath.using(conf).parse(src);
             long ts = System.currentTimeMillis();
             String deviceName;
             if (!StringUtils.isEmpty(deviceNameTopicExpression)) {
@@ -112,19 +118,21 @@ public class MqttJsonConverter extends AbstractJsonConverter implements MqttData
             for (KVMapping mapping : mappings) {
                 String key = eval(document, mapping.getKey());
                 String strVal = eval(document, mapping.getValue());
-                switch (mapping.getType().getDataType()) {
-                    case STRING:
-                        result.add(new StringDataEntry(key, strVal));
-                        break;
-                    case BOOLEAN:
-                        result.add(new BooleanDataEntry(key, Boolean.valueOf(strVal)));
-                        break;
-                    case DOUBLE:
-                        result.add(new DoubleDataEntry(key, Double.valueOf(strVal)));
-                        break;
-                    case LONG:
-                        result.add(new LongDataEntry(key, Long.valueOf(strVal)));
-                        break;
+                if (!strVal.equals("-99999")) {
+                    switch (mapping.getType().getDataType()) {
+                        case STRING:
+                            result.add(new StringDataEntry(key, strVal));
+                            break;
+                        case BOOLEAN:
+                            result.add(new BooleanDataEntry(key, Boolean.valueOf(strVal)));
+                            break;
+                        case DOUBLE:
+                            result.add(new DoubleDataEntry(key, Double.valueOf(strVal)));
+                            break;
+                        case LONG:
+                            result.add(new LongDataEntry(key, Long.valueOf(strVal)));
+                            break;
+                    }
                 }
             }
         }

@@ -45,7 +45,11 @@ public abstract class AbstractJsonConverter {
         while (matcher.find()) {
             String tag = matcher.group();
             String exp = tag.substring(2, tag.length() - 1);
-            String tagValue = ((Object) apply(document, exp)).toString();
+            // String tagValue = ((Object) apply(document, exp)).toString();
+            String tagValue = "-99999";
+            if(((Object) apply(document, exp)) != null){
+                tagValue = ((Object) apply(document, exp)).toString();
+            }
             result = result.replace(tag, tagValue);
         }
         return result;
